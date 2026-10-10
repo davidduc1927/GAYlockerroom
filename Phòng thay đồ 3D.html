@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phòng thay đồ 3D</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500&display=swap">
+<style>
+:root{--text:#f1e9df;--mute:#a99c8e;--amber:#f2b138;--line:rgba(241,233,223,.2);box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;height:100%;background:#120c09;color:var(--text);font:15px/1.5 Barlow,system-ui,sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;touch-action:none;cursor:grab}
+#c canvas{display:block}
+.top{position:fixed;left:0;right:0;top:0;padding:calc(14px + env(safe-area-inset-top,0px)) 20px 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;pointer-events:none}
+h1{margin:0;font:700 clamp(26px,4vw,40px)/1 "Barlow Condensed","Arial Narrow",sans-serif}
+.top p{margin:4px 0 0;color:var(--mute);font-size:13px}
+.filters{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto;align-self:flex-start}
+.chip,.btn{background:rgba(20,13,10,.6);backdrop-filter:blur(6px);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:5px 14px;font:inherit;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--amber);color:#201507;border-color:var(--amber)}
+.chip:focus-visible,.btn:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.hint{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--mute);font-size:13px;pointer-events:none}
+#card{position:fixed;right:20px;top:50%;width:340px;max-height:calc(100% - 40px);overflow:auto;transform:translate(120%,-50%);transition:transform .55s cubic-bezier(.2,.8,.2,1);background:rgba(34,22,17,.62);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:14px;padding:18px}
+#card.open{transform:translate(0,-50%)}
+.photo{position:relative;aspect-ratio:4/4.2;border-radius:9px;overflow:hidden;border:1px solid var(--line);background:#120c09}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.badge{position:absolute;left:12px;bottom:6px;font:700 60px/1 "Barlow Condensed",sans-serif;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+#card h2{font:700 32px/1.05 "Barlow Condensed",sans-serif;margin:14px 0 2px}
+.pos{color:var(--amber);margin:0 0 10px}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:5px 14px}
+dt{color:var(--mute)}dd{margin:0;text-align:right}
+.row{display:flex;gap:8px;margin-top:14px}
+.row .btn{flex:1;border-radius:8px;padding:8px}
+@media(max-width:760px){#card{left:12px;right:12px;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));width:auto;max-height:46%;transform:translateY(130%)}#card.open{transform:none}.photo{aspect-ratio:16/8}.hint{display:none}}
+</style>
+</head>
+<body>
+<div id="c"></div>
+<div class="top"><div><h1>Phòng thay đồ đội tuyển</h1><p>Kéo để lướt dọc thanh áo, bấm vào áo để xem hồ sơ.</p></div><div class="filters" id="filters" role="group" aria-label="Lọc theo vị trí"></div></div>
+<p class="hint">Dữ liệu cầu thủ là dữ liệu mẫu (hư cấu)</p>
+<aside id="card" aria-live="polite"></aside>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ====== DỮ LIỆU MẪU: sửa tại đây ======
+const POS={GK:"Thủ môn",DF:"Hậu vệ",MF:"Tiền vệ",FW:"Tiền đạo"};
+const PLAYERS=[
+{n:1,name:"Nguyễn Văn An",pos:"GK",club:"CLB Sài Gòn",caps:34,goals:0,born:"12/03/1996",place:"Đà Nẵng",h:"188 cm"},
+{n:12,name:"Trần Quốc Bảo",pos:"GK",club:"CLB Hà Nội",caps:8,goals:0,born:"02/09/1999",place:"Hải Phòng",h:"185 cm"},
+{n:23,name:"Lê Minh Châu",pos:"GK",club:"CLB Huế",caps:1,goals:0,born:"21/06/2002",place:"Huế",h:"183 cm"},
+{n:2,name:"Phạm Đức Dũng",pos:"DF",club:"CLB Sài Gòn",caps:41,goals:2,born:"05/01/1995",place:"Nghệ An",h:"179 cm"},
+{n:3,name:"Hoàng Gia Huy",pos:"DF",club:"CLB Bình Dương",caps:27,goals:1,born:"18/11/1997",place:"Bình Dương",h:"181 cm"},
+{n:4,name:"Võ Thành Khang",pos:"DF",club:"CLB Hà Nội",caps:52,goals:5,born:"30/07/1994",place:"Quảng Nam",h:"186 cm"},
+{n:5,name:"Đặng Nhật Long",pos:"DF",club:"CLB Thanh Hóa",caps:19,goals:0,born:"14/04/2000",place:"Thanh Hóa",h:"184 cm"},
+{n:6,name:"Bùi Tuấn Minh",pos:"DF",club:"CLB Huế",caps:12,goals:1,born:"09/12/2001",place:"Thừa Thiên",h:"177 cm"},
+{n:8,name:"Ngô Hải Nam",pos:"MF",club:"CLB Hà Nội",caps:60,goals:9,born:"25/02/1994",place:"Hà Nội",h:"174 cm"},
+{n:10,name:"Đỗ Anh Phúc",pos:"MF",club:"CLB Sài Gòn",caps:48,goals:14,born:"11/10/1998",place:"TP. Hồ Chí Minh",h:"172 cm"},
+{n:14,name:"Lý Quang Sơn",pos:"MF",club:"CLB Bình Dương",caps:22,goals:3,born:"03/05/1999",place:"Cần Thơ",h:"176 cm"},
+{n:16,name:"Mai Thế Tài",pos:"MF",club:"CLB Thanh Hóa",caps:15,goals:2,born:"27/08/2002",place:"Ninh Bình",h:"175 cm"},
+{n:7,name:"Vũ Hữu Thắng",pos:"FW",club:"CLB Hà Nội",caps:39,goals:17,born:"16/01/1997",place:"Nam Định",h:"180 cm"},
+{n:9,name:"Đinh Công Uy",pos:"FW",club:"CLB Sài Gòn",caps:31,goals:21,born:"08/06/1996",place:"Gia Lai",h:"183 cm"},
+{n:11,name:"Cao Văn Vinh",pos:"FW",club:"CLB Huế",caps:11,goals:4,born:"19/03/2003",place:"Quảng Trị",h:"178 cm"}
+];
+const KIT={GK:"#1f8a9a",DF:"#c8202a",MF:"#c8202a",FW:"#c8202a"};
+const $=s=>document.querySelector(s),photos={};
+const box=$("#c"),narrow=()=>innerWidth<760;
+const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));box.append(R.domElement);
+const S=new THREE.Scene();S.background=new THREE.Color(0x120c09);S.fog=new THREE.Fog(0x120c09,12,26);
+const cam=new THREE.PerspectiveCamera(40,1,.1,60);
+S.add(new THREE.HemisphereLight(0xffe8d0,0x2a1810,.9));
+const spot=new THREE.SpotLight(0xfff0dc,1.3,40,.9,.6);spot.position.set(0,6,8);S.add(spot);S.add(spot.target);
+// phòng: tường, sàn, thanh treo
+const wall=new THREE.Mesh(new THREE.PlaneGeometry(80,12),new THREE.MeshStandardMaterial({color:0x2a1d16,roughness:.9}));wall.position.set(0,-1,-.8);S.add(wall);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(80,14),new THREE.MeshStandardMaterial({color:0x1a110d,roughness:.5}));floor.rotation.x=-Math.PI/2;floor.position.set(0,-3.6,5);S.add(floor);
+const rail=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,60,12),new THREE.MeshStandardMaterial({color:0x9a8a78,metalness:.8,roughness:.3}));rail.rotation.z=Math.PI/2;rail.position.set(0,.25,0);S.add(rail);
+// áo
+const sh=new THREE.Shape();sh.moveTo(-.28,0);sh.quadraticCurveTo(0,-.24,.28,0);
+[[.75,-.1],[1.1,-.55],[.9,-.95],[.68,-.78],[.68,-2.4],[-.68,-2.4],[-.68,-.78],[-.9,-.95],[-1.1,-.55],[-.75,-.1]].forEach(p=>sh.lineTo(...p));sh.closePath();
+const geo=new THREE.ExtrudeGeometry(sh,{depth:.06,bevelEnabled:true,bevelSize:.02,bevelThickness:.02,bevelSegments:2,curveSegments:12});
+function tex(p){const c=document.createElement("canvas");c.width=c.height=512;const g=c.getContext("2d");
+const gr=g.createLinearGradient(0,0,0,512);gr.addColorStop(0,KIT[p.pos]);gr.addColorStop(1,"#00000055");g.fillStyle=KIT[p.pos];g.fillRect(0,0,512,512);g.fillStyle=gr;g.fillRect(0,0,512,512);
+g.fillStyle="#f1e9df";g.textAlign="center";g.font="700 42px 'Barlow Condensed','Arial Narrow',sans-serif";g.fillText(p.name.split(" ").slice(-1)[0].toUpperCase(),256,112);
+g.font="700 230px 'Barlow Condensed','Arial Narrow',sans-serif";g.fillText(p.n,256,330);g.globalAlpha=.4;g.fillRect(100,410,312,10);
+const t=new THREE.CanvasTexture(c);t.anisotropy=4;t.repeat.set(1/2.2,.4);t.offset.set(.5,1.016);return t}
+const shirts=[];let gi=-1,lastPos="",x=0;
+function build(){PLAYERS.forEach((p,i)=>{if(p.pos!==lastPos){gi++;lastPos=p.pos}
+const mat=new THREE.MeshStandardMaterial({map:tex(p),roughness:.85});
+const side=new THREE.MeshStandardMaterial({color:KIT[p.pos],roughness:.9});
+const m=new THREE.Mesh(geo,[mat,side]);m.position.z=-.03;
+const g=new THREE.Group();g.add(m);
+const hk=new THREE.Mesh(new THREE.BoxGeometry(1.1,.04,.04),new THREE.MeshStandardMaterial({color:0xb8a890,metalness:.6,roughness:.4}));hk.position.set(0,-.12,0);g.add(hk);
+g.position.set(i*1.45+gi*1.1,.25,0);g.userData={p,m,mat,rz:0,vz:0,hover:0,pop:0};S.add(g);shirts.push(g)});
+const mid=shirts[shirts.length-1].position.x/2;shirts.forEach(s=>s.position.x-=mid)}
+const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
+let sel=null,filter="ALL",hov=null,tx=0,camX=0,vel=0;
+const lo=()=>shirts[0].position.x+2,hi=()=>shirts[shirts.length-1].position.x-2;
+function view(){if(sel){const s=sel.position.x;return{x:s+(narrow()?0:1.15),y:narrow()?-.6:-.9,z:narrow()?5.4:4.6}}return{x:camX,y:-1.5,z:narrow()?15:9.6}}
+function select(s){if(sel&&sel!==s)sel.userData.vz+=.5;sel=s;if(s){camX=s.position.x;card(s.userData.p)}else $("#card").classList.remove("open")}
+function card(p){const c=$("#card");c.innerHTML=`<div class="photo"><img id="ph" alt="Ảnh ${p.name}"><span class="badge">${p.n}</span></div><h2>${p.name}</h2><p class="pos">${POS[p.pos]} · ${p.club}</p><dl><dt>Số trận</dt><dd>${p.caps}</dd><dt>Bàn thắng</dt><dd>${p.goals}</dd><dt>Ngày sinh</dt><dd>${p.born}</dd><dt>Quê quán</dt><dd>${p.place}</dd><dt>Chiều cao</dt><dd>${p.h}</dd></dl><div class="row"><button class="btn" id="up">Thêm ảnh</button><button class="btn" id="bk">Quay lại</button></div><input type="file" accept="image/*" id="file" hidden>`;
+$("#ph").src=photos[p.n]||av(p);$("#up").onclick=()=>$("#file").click();$("#bk").onclick=()=>select(null);
+$("#file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{photos[p.n]=r.result;$("#ph").src=r.result};r.readAsDataURL(f)};
+requestAnimationFrame(()=>c.classList.add("open"))}
+function av(p){const i=p.name.split(" ").slice(-2).map(w=>w[0]).join("");return"data:image/svg+xml,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 420"><rect width="400" height="420" fill="#1a110d"/><circle cx="200" cy="170" r="70" fill="${KIT[p.pos]}"/><path d="M60 420Q70 290 200 290Q330 290 340 420Z" fill="${KIT[p.pos]}"/><text x="200" y="192" text-anchor="middle" font-family="Arial" font-weight="700" font-size="56" fill="#f1e9df">${i}</text></svg>`)}
+function filters(){const f=$("#filters");f.innerHTML="";[["ALL","Tất cả"],...Object.entries(POS)].forEach(([k,l])=>{const b=document.createElement("button");b.className="chip";b.textContent=l;b.setAttribute("aria-pressed",filter===k);b.onclick=()=>{filter=k;filters()};f.append(b)})}
+function pickAt(e){const r=R.domElement.getBoundingClientRect();mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mouse,cam);const h=ray.intersectObjects(shirts.map(s=>s.userData.m))[0];return h?h.object.parent:null}
+let dn=false,sx=0,sc=0,mv=0;
+box.addEventListener("pointerdown",e=>{dn=true;sx=e.clientX;sc=camX;mv=0;box.setPointerCapture(e.pointerId)});
+box.addEventListener("pointermove",e=>{if(dn){const d=e.clientX-sx;mv=Math.max(mv,Math.abs(d));if(mv>6&&!sel){const k=2*cam.position.z*Math.tan(.35)*cam.aspect/innerWidth;camX=Math.min(hi(),Math.max(lo(),sc-d*k))}}else{hov=pickAt(e);box.style.cursor=hov?"pointer":"grab"}});
+box.addEventListener("pointerup",e=>{dn=false;if(mv<6){const s=pickAt(e);if(s&&s!==sel)select(s);else if(!s&&sel)select(null)}});
+box.addEventListener("wheel",e=>{if(!sel){camX=Math.min(hi(),Math.max(lo(),camX+(e.deltaY+e.deltaX)*.01))}},{passive:true});
+addEventListener("keydown",e=>{if(e.key==="Escape")select(null);const i=shirts.indexOf(sel);if(e.key==="ArrowRight")select(shirts[Math.min(shirts.length-1,i+1)]);if(e.key==="ArrowLeft"&&sel)select(shirts[Math.max(0,i-1)])});
+function size(){const w=box.clientWidth,h=box.clientHeight;R.setSize(w,h);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener("resize",size);
+const clk=new THREE.Clock();
+function loop(){const dt=Math.min(clk.getDelta(),.05),v=view(),k=1-Math.pow(.002,dt);
+cam.position.x+=(v.x-cam.position.x)*k;cam.position.y+=(v.y-cam.position.y)*k;cam.position.z+=(v.z-cam.position.z)*k;
+cam.lookAt(cam.position.x,cam.position.y-.05,0);spot.position.set(cam.position.x,6,cam.position.z+3);spot.target.position.set(cam.position.x,-1,0);
+shirts.forEach(g=>{const u=g.userData,on=g===sel,hv=g===hov&&!sel,ok=filter==="ALL"||u.p.pos===filter;
+u.vz+=(-28*u.rz-3.2*u.vz)*dt;u.rz+=u.vz*dt;g.rotation.z=u.rz;
+if(hv&&!u.hover)u.vz+=.35;u.hover=hv;
+const tz=on?1.1:0,ty=.25+(hv?.12:0),ts=on?1.12:(ok?1:.9);
+g.position.z+=(tz-g.position.z)*k;g.position.y+=(ty-g.position.y)*k;g.scale.setScalar(g.scale.x+(ts-g.scale.x)*k);
+const c=ok?1:.3;u.mat.color.setScalar(u.mat.color.r+(c-u.mat.color.r)*k)});
+R.render(S,cam);requestAnimationFrame(loop)}
+build();filters();size();
+cam.position.set(0,-1.5,narrow()?15:9.6);
+(document.fonts&&document.fonts.ready?Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,1500))]):Promise.resolve()).then(()=>{shirts.forEach(g=>{g.userData.mat.map=tex(g.userData.p);g.userData.mat.needsUpdate=true});});
+loop();
+</script>
+</body>
+</html>
